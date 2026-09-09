@@ -11,6 +11,8 @@ const Allocator = std.mem.Allocator;
 /// Base URL of the OpenAI-compatible server (llama.cpp, mlx_lm.server, ...).
 /// No default: a local inference server has no canonical address.
 const base_url_env = "FX_OPENAI_COMPAT_BASE_URL";
+/// Optional: most local servers need no key. Empty or unset sends no Authorization header.
+const api_key_env = "FX_OPENAI_COMPAT_API_KEY";
 const chat_completions_path = "/v1/chat/completions";
 const max_error_body_bytes: usize = 256 * 1024;
 const max_sse_line_bytes: usize = 1024 * 1024;
@@ -173,10 +175,11 @@ pub fn streamPrepared(
     defer alloc.free(request_endpoint);
     const uri = try std.Uri.parse(request_endpoint);
 
-    const auth_header: ?[]u8 = if (request.credential.secret()) |secret_bytes|
-        try std.fmt.allocPrint(alloc, "Bearer {s}", .{secret_bytes})
+    const configured_key = io_mod.getenv(api_key_env);
+    const auth_header: ?[]u8 = if (configured_key) |key| (if (key.len > 0)
+        try std.fmt.allocPrint(alloc, "Bearer {s}", .{key})
     else
-        null;
+        null) else null;
     defer if (auth_header) |value| alloc.free(value);
 
     var extra_headers_buf: [1]std.http.Header = .{

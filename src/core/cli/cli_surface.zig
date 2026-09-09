@@ -1170,14 +1170,32 @@ fn runNonInteractiveWithDeps(
             return .handled_success;
         },
         .provider => |rest| {
-            if (rest.len != 1) {
-                try writeStderr(deps, "usage: fx provider <gateway|codex|grok|openai-compatible>\n");
+            if (rest.len < 1 or rest.len > 3) {
+                try writeStderr(deps, "usage: fx provider <gateway|codex|grok|openai-compatible> [base-url] [api-key]\n");
                 return .handled_failure;
             }
             const target = provider_catalog.parse(rest[0]) orelse {
                 try writeStderr(deps, "fx provider: expected gateway, codex, grok, or openai-compatible\n");
                 return .handled_failure;
             };
+            if (rest.len > 1 and target != .openai_compat) {
+                try writeStderr(deps, "fx provider: a base URL and API key are only accepted for openai-compatible\n");
+                return .handled_failure;
+            }
+            if (target == .openai_compat and rest.len > 1) {
+                const base_url = rest[1];
+                const api_key: []const u8 = if (rest.len > 2) rest[2] else "";
+                var attempt = config_runtime.attemptUserPreferences(alloc, .{
+                    .openai_compat_base_url = base_url,
+                    .openai_compat_api_key = api_key,
+                });
+                defer attempt.deinit(alloc);
+                if (attempt == .failure) {
+                    try writeProviderActivationError(alloc, deps, .provider_command, "failed to save the OpenAI-compatible server settings");
+                    return .handled_failure;
+                }
+                app_lifecycle.forceOpenAiCompatEnv(base_url, api_key);
+            }
             return if (try activateProviderSelection(alloc, cfg, deps, target, .provider_command, null))
                 .handled_success
             else

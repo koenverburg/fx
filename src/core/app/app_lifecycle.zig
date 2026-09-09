@@ -456,6 +456,40 @@ fn loadStartupStateForWorkspace(alloc: Allocator, workspace_root: []const u8, de
 
 const CredentialLoadMode = credentials.LoadMode;
 
+const openai_compat_base_url_env = "FX_OPENAI_COMPAT_BASE_URL";
+const openai_compat_api_key_env = "FX_OPENAI_COMPAT_API_KEY";
+
+/// The openai_compat gateway transport reads its server address and key only
+/// from these env vars (transport must not read product settings directly).
+/// This is the one place core translates the persisted setting into that
+/// contract. At startup this only fills in an unset env var; `force` is for
+/// a value the user just explicitly gave on this same invocation (e.g. `fx
+/// provider openai-compatible <url>`), which must win over a stale ambient
+/// env var from an earlier session.
+pub fn injectOpenAiCompatEnvFromSettings(base_url: ?[]const u8, api_key: ?[]const u8) void {
+    injectOpenAiCompatEnv(base_url, api_key, false);
+}
+
+pub fn forceOpenAiCompatEnv(base_url: ?[]const u8, api_key: ?[]const u8) void {
+    injectOpenAiCompatEnv(base_url, api_key, true);
+}
+
+fn injectOpenAiCompatEnv(base_url: ?[]const u8, api_key: ?[]const u8, force: bool) void {
+    const need_base_url = base_url != null and (force or io_mod.getenv(openai_compat_base_url_env) == null);
+    const need_api_key = api_key != null and (force or io_mod.getenv(openai_compat_api_key_env) == null);
+    if (!need_base_url and !need_api_key) return;
+
+    const heap = std.heap.page_allocator;
+    const map = heap.create(std.process.Environ.Map) catch return;
+    map.* = io_mod.cloneEnvironMap(heap) catch {
+        heap.destroy(map);
+        return;
+    };
+    if (need_base_url) map.put(openai_compat_base_url_env, base_url.?) catch {};
+    if (need_api_key) map.put(openai_compat_api_key_env, api_key.?) catch {};
+    io_mod.setEnvironMap(map);
+}
+
 fn loadStartupStateFromOwnedWorkspace(
     alloc: Allocator,
     transport: oauth_transport.Provider,
@@ -481,6 +515,7 @@ fn loadStartupStateFromOwnedWorkspace(
         try config_runtime.loadMergedSettingsDetailed(alloc, state.workspace_root);
     defer detailed.deinit(alloc);
     const settings = &detailed.settings;
+    injectOpenAiCompatEnvFromSettings(settings.openai_compat_base_url, settings.openai_compat_api_key);
 
     state.workspace_access = try workspace_access.WorkspaceAccess.init(
         alloc,

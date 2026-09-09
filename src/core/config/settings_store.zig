@@ -110,6 +110,8 @@ pub const UserSettingsPatch = struct {
     notification_turn_end: ?bool = null,
     notification_attention_required: ?bool = null,
     notification_max: ?bool = null,
+    openai_compat_base_url: ?[]const u8 = null,
+    openai_compat_api_key: ?[]const u8 = null,
 
     fn isEmpty(self: UserSettingsPatch) bool {
         return self.model_preference == null and
@@ -128,7 +130,9 @@ pub const UserSettingsPatch = struct {
             self.statusline_item == null and
             self.notification_turn_end == null and
             self.notification_attention_required == null and
-            self.notification_max == null;
+            self.notification_max == null and
+            self.openai_compat_base_url == null and
+            self.openai_compat_api_key == null;
     }
 };
 
@@ -1030,6 +1034,8 @@ fn applyUserPatchToRoot(
     if (patch.collapse_tool_calls) |value| application.changed = try putBool(arena, &root.object, "collapse_tool_calls", value) or application.changed;
     if (patch.update_channel) |value| application.changed = try putString(arena, &root.object, "update_channel", value.label()) or application.changed;
     if (patch.startup_scrollback) |value| application.changed = try putBool(arena, &root.object, "startup_scrollback", value) or application.changed;
+    if (patch.openai_compat_base_url) |value| application.changed = try putString(arena, &root.object, "openai_compat_base_url", value) or application.changed;
+    if (patch.openai_compat_api_key) |value| application.changed = try putString(arena, &root.object, "openai_compat_api_key", value) or application.changed;
 
     if (patch.prompt_history_enabled) |enabled| {
         var prompt_history = if (root.object.getPtr("prompt_history")) |value| blk: {

@@ -7,6 +7,7 @@ const secret = @import("../core/auth/secret.zig");
 const gateway_client = @import("client.zig");
 
 const base_url_env = "FX_OPENAI_COMPAT_BASE_URL";
+const api_key_env = "FX_OPENAI_COMPAT_API_KEY";
 const models_path = "/v1/models";
 const max_catalog_bytes: usize = 1024 * 1024;
 const max_catalog_models: usize = 512;
@@ -103,10 +104,17 @@ const FetchOperation = struct {
     pub fn run(self: *@This()) !FetchResponse {
         var client: std.http.Client = .{ .allocator = self.alloc, .io = io_mod.getIo() };
         defer client.deinit();
-        const headers: std.http.Client.Request.Headers = .{
+        const configured_key = io_mod.getenv(api_key_env);
+        const auth_header: ?[]u8 = if (configured_key) |key| (if (key.len > 0)
+            try std.fmt.allocPrint(self.alloc, "Bearer {s}", .{key})
+        else
+            null) else null;
+        defer if (auth_header) |value| secret.zeroAndFree(self.alloc, value);
+        var headers: std.http.Client.Request.Headers = .{
             .user_agent = .{ .override = gateway_client.user_agent },
             .accept_encoding = .omit,
         };
+        if (auth_header) |value| headers.authorization = .{ .override = value };
         const body_buffer = try self.alloc.alloc(u8, max_catalog_bytes + 1);
         defer secret.zeroAndFree(self.alloc, body_buffer);
         var response_writer = std.Io.Writer.fixed(body_buffer);

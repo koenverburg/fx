@@ -64,10 +64,17 @@ pub const Settings = struct {
     notification_max: ?bool = null,
     permission_rules: types.PermissionRuleSet = .{},
     has_permission_rules: bool = false,
+    /// Local OpenAI-compatible server (llama.cpp, mlx). No default: a local
+    /// inference server has no canonical address.
+    openai_compat_base_url: ?[]const u8 = null,
+    /// Empty string means "no Authorization header" — most local servers need none.
+    openai_compat_api_key: ?[]const u8 = null,
 
     pub fn deinit(self: *Settings, alloc: Allocator) void {
         self.models.deinit(alloc);
         self.permission_rules.deinit(alloc);
+        if (self.openai_compat_base_url) |value| alloc.free(value);
+        if (self.openai_compat_api_key) |value| alloc.free(value);
         self.* = .{};
     }
 };
@@ -624,6 +631,8 @@ fn isProfileOnlySettingKey(key: []const u8) bool {
         "yolo_acknowledged",
         "permission",
         "additional_directories",
+        "openai_compat_base_url",
+        "openai_compat_api_key",
     }) |profile_key| {
         if (std.mem.eql(u8, key, profile_key)) return true;
     }
@@ -1456,6 +1465,16 @@ fn parseProfileOnlyFields(
         settings.startup_scrollback = value.bool;
     }
 
+    if (root.object.get("openai_compat_base_url")) |base_url_value| {
+        if (base_url_value != .string) return error.InvalidOpenAiCompatBaseUrlType;
+        settings.openai_compat_base_url = try alloc.dupe(u8, base_url_value.string);
+    }
+
+    if (root.object.get("openai_compat_api_key")) |api_key_value| {
+        if (api_key_value != .string) return error.InvalidOpenAiCompatApiKeyType;
+        settings.openai_compat_api_key = try alloc.dupe(u8, api_key_value.string);
+    }
+
     if (root.object.get("prompt_history")) |prompt_history_value| {
         if (prompt_history_value != .object) return error.InvalidPromptHistoryType;
         if (prompt_history_value.object.get("enabled")) |enabled| {
@@ -1568,6 +1587,17 @@ fn mergeSettings(target: *Settings, incoming: *Settings, alloc: Allocator) void 
     if (incoming.notification_turn_end) |value| target.notification_turn_end = value;
     if (incoming.notification_attention_required) |value| target.notification_attention_required = value;
     if (incoming.notification_max) |value| target.notification_max = value;
+
+    if (incoming.openai_compat_base_url) |value| {
+        if (target.openai_compat_base_url) |old| alloc.free(old);
+        target.openai_compat_base_url = value;
+        incoming.openai_compat_base_url = null;
+    }
+    if (incoming.openai_compat_api_key) |value| {
+        if (target.openai_compat_api_key) |old| alloc.free(old);
+        target.openai_compat_api_key = value;
+        incoming.openai_compat_api_key = null;
+    }
 
     if (incoming.has_permission_rules) {
         target.permission_rules.deinit(alloc);
