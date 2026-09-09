@@ -5,6 +5,7 @@ pub const ProviderId = enum {
     gateway,
     codex,
     grok,
+    openai_compat,
 };
 
 pub const ProviderSelection = struct {
@@ -16,16 +17,20 @@ pub fn parse(value: []const u8) ?ProviderId {
     if (std.ascii.eqlIgnoreCase(value, "gateway")) return .gateway;
     if (std.ascii.eqlIgnoreCase(value, "codex")) return .codex;
     if (std.ascii.eqlIgnoreCase(value, "grok")) return .grok;
+    if (std.ascii.eqlIgnoreCase(value, "openai_compat")) return .openai_compat;
     return null;
 }
 
 pub fn authorizesCredential(provider: ProviderId, source: ?types.CredentialSource) bool {
+    // A local OpenAI-compatible server (llama.cpp, mlx) needs no credential at all.
+    if (provider == .openai_compat) return true;
     const selected = source orelse return false;
     if (selected == .host_managed) return true;
     return switch (provider) {
         .gateway => selected != .chatgpt_subscription and selected != .grok_subscription,
         .codex => selected == .chatgpt_subscription,
         .grok => selected == .grok_subscription,
+        .openai_compat => unreachable,
     };
 }
 
@@ -39,12 +44,15 @@ test "explicit providers authorize only their own credential origins" {
     try std.testing.expect(authorizesCredential(.grok, .grok_subscription));
     try std.testing.expect(!authorizesCredential(.grok, .chatgpt_subscription));
     try std.testing.expect(!authorizesCredential(.gateway, .grok_subscription));
+    try std.testing.expect(authorizesCredential(.openai_compat, null));
+    try std.testing.expect(authorizesCredential(.openai_compat, .chatgpt_subscription));
 }
 
-test "provider parsing exposes gateway codex and grok" {
+test "provider parsing exposes gateway codex grok and openai_compat" {
     try std.testing.expectEqual(ProviderId.gateway, parse("gateway").?);
     try std.testing.expectEqual(ProviderId.codex, parse("CODEX").?);
     try std.testing.expectEqual(ProviderId.grok, parse("GROK").?);
+    try std.testing.expectEqual(ProviderId.openai_compat, parse("openai_compat").?);
     try std.testing.expect(parse("openai-codex") == null);
     try std.testing.expect(parse("") == null);
 }

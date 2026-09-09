@@ -73,6 +73,7 @@ pub fn logoutFallbackProviders(facts: LogoutFacts) [2]?model_provider.ProviderId
                 facts.available_sources.contains(.stored_key),
             .codex => facts.available_sources.contains(.chatgpt_subscription),
             .grok => facts.available_sources.contains(.grok_subscription),
+            .openai_compat => false,
         };
         if (!available) continue;
         candidates[count] = provider;
@@ -155,6 +156,8 @@ pub fn signInCompletion(
             .{ .switch_provider = .grok }
         else
             .{ .activate_source = .grok_subscription },
+        // No OAuth flow ever completes for a local OpenAI-compatible server.
+        .openai_compat => .{ .activate_source = .host_managed },
     };
 }
 

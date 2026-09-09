@@ -170,6 +170,9 @@ pub fn Runtime(comptime App: type) type {
                         .gateway => credentials.missing_interactive_credential_message,
                         .codex => credentials.missing_chatgpt_interactive_credential_message,
                         .grok => credentials.missing_grok_interactive_credential_message,
+                        // A local OpenAI-compatible server is always authorized (model_provider.authorizesCredential),
+                        // so selectProviderCredential never reports it missing.
+                        .openai_compat => unreachable,
                     },
                 }, true),
                 .failed => |failure| {
@@ -1214,7 +1217,7 @@ pub fn Runtime(comptime App: type) type {
                     switch (target) {
                         .codex => try beginCodexSignInForProviderSwitch(app),
                         .grok => try beginGrokSignInForProviderSwitch(app),
-                        .gateway => {},
+                        .gateway, .openai_compat => {},
                     }
                 }
                 if (target == .gateway or !request.allow_login) {
@@ -2217,7 +2220,7 @@ test "interactive subscription sign-in rejects active and queued work before OAu
             switch (provider) {
                 .codex => try Runtime(BusySignInApp).beginChatGptSignIn(&app),
                 .grok => try Runtime(BusySignInApp).beginGrokSignIn(&app),
-                .gateway => unreachable,
+                .gateway, .openai_compat => unreachable,
             }
 
             try std.testing.expectEqual(@as(usize, 0), app.auth.start_count);

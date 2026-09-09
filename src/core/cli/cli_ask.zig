@@ -1473,7 +1473,8 @@ fn runPromptInternal(alloc: Allocator, prompt: []const u8, permission_override: 
     try checkHeadlessCancellation(options.deps);
 
     if (cfg.auth_mode == .local and
-        !options.continue_recovery and options.resume_target == null and startup.credential == null)
+        !options.continue_recovery and options.resume_target == null and startup.credential == null and
+        !model_provider.authorizesCredential(startup.provider, null))
     {
         if (startup.credential_load_failure) |failure| {
             if (auth_runtime.preparationError(auth_runtime.classifyCredentialFailure(failure.source, failure.err))) |err| return err;
@@ -1565,7 +1566,10 @@ fn runPromptInternal(alloc: Allocator, prompt: []const u8, permission_override: 
 
     var routed_credential: ?credentials.Credential = null;
     defer if (routed_credential) |*credential| credential.deinit(alloc);
-    if (cfg.auth_mode == .host_managed) {
+    // A provider that authorizes every request without a credential (a local
+    // OpenAI-compatible server) is handled the same way as a host-managed
+    // embedding: fx never resolves or attaches a credential for it.
+    if (cfg.auth_mode == .host_managed or model_provider.authorizesCredential(ctx.provider, null)) {
         ctx.api_key = "";
         ctx.gateway_team = null;
         ctx.credential_source = .host_managed;

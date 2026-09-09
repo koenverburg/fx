@@ -1589,6 +1589,7 @@ fn putModelPreference(
         .gateway => "model",
         .codex => "codex_model",
         .grok => "grok_model",
+        .openai_compat => "openai_compat_model",
     };
     if (root.contains(legacy_key)) {
         _ = root.orderedRemove(legacy_key);

@@ -702,6 +702,11 @@ fn runProviderLogin(alloc: Allocator, cfg: Config, provider: model_provider.Prov
         .gateway => try login_flow.runLogin(alloc, cfg.gateway_provider.oauth_transport, cfg.url_opener),
         .codex => try chatgpt_oauth.runLogin(alloc, cfg.gateway_provider.oauth_transport, cfg.url_opener),
         .grok => try grok_oauth.runLogin(alloc, cfg.gateway_provider.oauth_transport, cfg.url_opener),
+        // No OAuth: a local OpenAI-compatible server needs no sign-in. `fx login
+        // openai-compatible` still reaches here (unlike the subscription-login
+        // branch in activateProviderSelectionFallible), so this must be a no-op
+        // rather than unreachable.
+        .openai_compat => {},
     }
 }
 
@@ -739,8 +744,12 @@ fn activateProviderSelectionFallible(
     };
     defer settings.deinit(alloc);
 
+    // A local OpenAI-compatible server carries no fx-managed credential, the
+    // same way a host-managed embedding auth mode carries none.
+    const target_is_host_managed = cfg.auth_mode == .host_managed or target == .openai_compat;
+
     const preferred_source = exact_source orelse settings.credential_source;
-    var prepared_credential = if (cfg.auth_mode == .host_managed)
+    var prepared_credential = if (target_is_host_managed)
         null
     else
         try auth_runtime.prepareCredential(
@@ -754,12 +763,13 @@ fn activateProviderSelectionFallible(
 
     const already_selected = (settings.provider orelse .gateway) == target;
     if (caller == .provider_command and already_selected and
-        (cfg.auth_mode == .host_managed or prepared_credential != null))
+        (target_is_host_managed or prepared_credential != null))
     {
         try writeStdout(deps, switch (target) {
             .gateway => "Gateway is already selected.\n",
             .codex => "Codex is already selected.\n",
             .grok => "Grok is already selected.\n",
+            .openai_compat => "OpenAI-compatible is already selected.\n",
         });
         return true;
     }
@@ -780,7 +790,7 @@ fn activateProviderSelectionFallible(
         );
     }
 
-    const credential = if (cfg.auth_mode == .host_managed)
+    const credential = if (target_is_host_managed)
         null
     else if (prepared_credential) |*value|
         value
@@ -793,6 +803,7 @@ fn activateProviderSelectionFallible(
                 .codex => "Codex credential is unavailable",
                 .grok => "Grok credential is unavailable",
                 .gateway => "configure a Gateway credential first",
+                .openai_compat => unreachable,
             },
         );
         return false;
@@ -802,11 +813,12 @@ fn activateProviderSelectionFallible(
             .codex => "Codex model catalog is unavailable",
             .grok => "Grok model catalog is unavailable",
             .gateway => "Gateway model catalog is unavailable",
+            .openai_compat => "OpenAI-compatible model catalog is unavailable",
         });
         return false;
     };
     const fetch_result = model_catalog.fetchWithPublicFallback(catalog_provider, alloc, .{
-        .access = if (cfg.auth_mode == .host_managed)
+        .access = if (target_is_host_managed)
             .host_managed
         else
             credentials.catalogAccessAt(
@@ -868,13 +880,14 @@ fn activateProviderSelectionFallible(
     if (performed_login) |provider| switch (provider) {
         .codex => try writeStdout(deps, "Signed in with Codex.\n"),
         .grok => try writeStdout(deps, "Signed in with Grok.\n"),
-        .gateway => unreachable,
+        .gateway, .openai_compat => unreachable,
     };
     if (caller == .provider_command) {
         try writeStdout(deps, switch (target) {
             .gateway => "Provider set to Gateway.\n",
             .codex => "Provider set to Codex.\n",
             .grok => "Provider set to Grok.\n",
+            .openai_compat => "Provider set to OpenAI-compatible.\n",
         });
     }
     return true;
@@ -1019,6 +1032,7 @@ fn runNonInteractiveWithDeps(
                 .gateway => "Signed in to Vercel.\nAI Gateway access may still require billing or API setup for the selected account.\n",
                 .codex => "Signed in with Codex.\n",
                 .grok => "Signed in with Grok.\n",
+                .openai_compat => "Using local OpenAI-compatible server.\n",
             });
             return .handled_success;
         },
@@ -1157,11 +1171,11 @@ fn runNonInteractiveWithDeps(
         },
         .provider => |rest| {
             if (rest.len != 1) {
-                try writeStderr(deps, "usage: fx provider <gateway|codex|grok>\n");
+                try writeStderr(deps, "usage: fx provider <gateway|codex|grok|openai-compatible>\n");
                 return .handled_failure;
             }
-            const target = model_provider.parse(rest[0]) orelse {
-                try writeStderr(deps, "fx provider: expected gateway, codex, or grok\n");
+            const target = provider_catalog.parse(rest[0]) orelse {
+                try writeStderr(deps, "fx provider: expected gateway, codex, grok, or openai-compatible\n");
                 return .handled_failure;
             };
             return if (try activateProviderSelection(alloc, cfg, deps, target, .provider_command, null))
@@ -1280,6 +1294,7 @@ fn runNonInteractiveWithDeps(
                     .gateway => "fx models: Gateway model catalog is unavailable\n",
                     .codex => "fx models: Codex model catalog is unavailable\n",
                     .grok => "fx models: Grok model catalog is unavailable\n",
+                    .openai_compat => "fx models: OpenAI-compatible model catalog is unavailable\n",
                 });
                 return .handled_failure;
             };
