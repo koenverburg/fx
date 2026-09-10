@@ -888,10 +888,15 @@ pub const ProviderPreparation = struct {
     fn run(self: *ProviderPreparation) void {
         defer self.done.store(true, .release);
         if (self.cancel_requested.load(.seq_cst)) return;
+        // A provider that authorizes every request without a credential (a local
+        // OpenAI-compatible server) is prepared the same way as a host-managed
+        // embedding: no credential is resolved or required before the catalog fetch.
+        const target_is_credential_free = self.host_managed or
+            model_provider.authorizesCredential(self.input.target(), null);
         if (self.input.candidate) |candidate| {
             self.credential = candidate;
             self.input.candidate = null;
-        } else if (!self.host_managed) {
+        } else if (!target_is_credential_free) {
             self.credential = prepareCredential(
                 self.alloc,
                 .{ .context = self, .execute_fn = executeCancellable },
@@ -905,7 +910,7 @@ pub const ProviderPreparation = struct {
             if (self.credential == null) return;
         }
         if (self.cancel_requested.load(.seq_cst)) return;
-        const access: credentials.CatalogAccess = if (self.host_managed)
+        const access: credentials.CatalogAccess = if (target_is_credential_free)
             .host_managed
         else
             credentials.catalogAccessForCredentialAndAccount(
@@ -1332,7 +1337,7 @@ pub const PickerView = struct {
 };
 
 fn connectionChoiceCount() usize {
-    return if (comptime host_target.is_wasm) 2 else 4;
+    return if (comptime host_target.is_wasm) 2 else 5;
 }
 
 fn connectionChoiceAt(index: usize) ?Choice {
@@ -1348,6 +1353,7 @@ fn connectionChoiceAt(index: usize) ?Choice {
         1 => .{ .action = .chatgpt_login },
         2 => .{ .action = .grok_login },
         3 => .{ .action = .setup },
+        4 => .{ .provider = .openai_compat },
         else => null,
     };
 }
@@ -4386,13 +4392,14 @@ test "auth onboarding picker exposes the setup paths" {
 
     const picker = runtime.pickerView();
     try std.testing.expect(picker.include_skip);
-    try std.testing.expectEqual(@as(usize, 4), picker.choiceCount());
+    try std.testing.expectEqual(@as(usize, 5), picker.choiceCount());
     try std.testing.expect((Choice{ .action = .login }).eql(picker.choiceAt(0).?));
     try std.testing.expect((Choice{ .action = .chatgpt_login }).eql(picker.choiceAt(1).?));
     try std.testing.expect((Choice{ .action = .grok_login }).eql(picker.choiceAt(2).?));
     try std.testing.expect((Choice{ .action = .setup }).eql(picker.choiceAt(3).?));
     try std.testing.expectEqualStrings("Add an API key", picker.choiceLabel(picker.choiceAt(3).?));
-    try std.testing.expect(picker.choiceAt(4) == null);
+    try std.testing.expect((Choice{ .provider = .openai_compat }).eql(picker.choiceAt(4).?));
+    try std.testing.expect(picker.choiceAt(5) == null);
 }
 
 test "clearing a remembered choice re-resolves even when no login was active" {

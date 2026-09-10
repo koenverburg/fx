@@ -1193,9 +1193,12 @@ pub fn Runtime(comptime App: type) type {
             const request = task.input.intent.provider;
             const target = request.target;
             const intent = request.origin;
+            // A provider that authorizes every request without a credential (a local
+            // OpenAI-compatible server) never fails on a missing credential.
+            const credential_required = !hostManagesAuth(app) and !model_provider.authorizesCredential(target, null);
             if (task.failure) |err| {
                 debug_trace.logf("provider", "preparation failed target={t} err={s}", .{ target, @errorName(err) });
-                if (task.credential == null and !hostManagesAuth(app)) {
+                if (task.credential == null and credential_required) {
                     const body = try auth_runtime.preparationFailureText(app.alloc, target, err);
                     defer app.alloc.free(body);
                     try app.writeDomainNotice(.{
@@ -1212,7 +1215,7 @@ pub fn Runtime(comptime App: type) type {
                 }
                 return false;
             }
-            if (task.credential == null and !hostManagesAuth(app)) {
+            if (task.credential == null and credential_required) {
                 if (request.allow_login) {
                     switch (target) {
                         .codex => try beginCodexSignInForProviderSwitch(app),
