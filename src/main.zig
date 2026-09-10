@@ -43,6 +43,7 @@ const app_commands = @import("core/app/app_commands.zig");
 const change_tracker_mod = @import("core/workspace/change_tracker.zig");
 const context_contract = @import("core/workspace/context_contract.zig");
 const statusline_identity = @import("core/workspace/statusline_identity.zig");
+const git_diff_stat = @import("core/workspace/git_diff_stat.zig");
 const collections = @import("core/shared/collections.zig");
 const agent_steps = @import("core/config/agent_steps.zig");
 const config_runtime = @import("core/config/config_runtime.zig");
@@ -517,6 +518,7 @@ const App = struct {
     usage_dashboard: usage_dashboard_runtime.Runtime = usage_dashboard_runtime.Runtime.init(std.heap.c_allocator),
     workspace_root: []u8 = &.{},
     workspace_identity: statusline_identity.Runtime = .{},
+    git_diff: git_diff_stat.Runtime = .{},
     workspace_host: WorkspaceHostRuntime = .{},
     workspace: app_workspace_runtime.State = .{},
     permission_engine: PermissionEngine = .{},
@@ -576,6 +578,7 @@ const App = struct {
 
     statusline_context: bool = false,
     statusline_session: bool = false,
+    statusline_tokens_per_second: bool = false,
     /// Resolved display title for the active session. App owns these bytes;
     /// empty means no title has been derived or restored yet.
     session_title: std.ArrayList(u8) = .empty,
@@ -894,6 +897,7 @@ const App = struct {
         self.auth.deinit(self.alloc);
         WorkspaceAppRuntime.deinit(self);
         self.workspace_identity.deinit(self.alloc);
+        self.git_diff.deinit(self.alloc);
         if (self.workspace_root.len > 0) self.alloc.free(self.workspace_root);
         return .{ .handoff = resume_handoff, .failure = shutdown_failure };
     }

@@ -210,6 +210,8 @@ pub const StatuslineItems = struct {
     context_used: u64 = 0,
     context_total: ?u32 = null,
     session_title: ?[]const u8 = null,
+    git_lines_changed: u32 = 0,
+    tokens_per_second: ?f64 = null,
 };
 
 /// Cell budget for the session title segment. The title is capped at 8 words
@@ -422,6 +424,11 @@ pub fn buildHintLine(
         appendStatusSegment(out, &end, "⚡︎");
     }
 
+    if (statusline.tokens_per_second) |rate| {
+        var tps_buf: [24]u8 = undefined;
+        appendStatusSegment(out, &end, std.fmt.bufPrint(&tps_buf, "{d:.1} tok/s", .{rate}) catch "");
+    }
+
     if (statusline.session_title) |title| {
         appendStatusSegment(out, &end, display_width.prefixByWidth(title, max_session_title_cells));
     }
@@ -439,6 +446,11 @@ pub fn buildHintLine(
             appendStatusSegment(out, &end, std.fmt.bufPrint(&ctx_buf, "{d}k", .{used_k}) catch "");
         }
     }
+    if (statusline.git_lines_changed > 0) {
+        var diff_buf: [24]u8 = undefined;
+        appendStatusSegment(out, &end, std.fmt.bufPrint(&diff_buf, "±{d}", .{statusline.git_lines_changed}) catch "");
+    }
+
     appendWorkspaceIdentity(out, &end, status_limit, statusline);
 
     const width_usize: usize = width;

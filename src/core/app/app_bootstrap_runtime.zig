@@ -15,6 +15,7 @@ const host = @import("../hosts/host.zig");
 const debug_trace = @import("../shared/debug_trace.zig");
 const record_tape = @import("../workspace/record_tape.zig");
 const statusline_identity = @import("../workspace/statusline_identity.zig");
+const git_diff_stat = @import("../workspace/git_diff_stat.zig");
 const shared_io = @import("../shared/io.zig");
 const mcp_runtime = @import("../mcp/mcp_runtime.zig");
 const permissions = @import("../permissions/permissions.zig");
@@ -296,8 +297,12 @@ pub fn Runtime(comptime App: type) type {
             app_permission_runtime.Runtime(App).initializeYoloWarning(app);
             app.statusline_context = startup.statusline_context;
             app.statusline_session = startup.statusline_session;
+            app.statusline_tokens_per_second = startup.statusline_tokens_per_second;
             if (comptime @hasField(App, "workspace_identity")) {
                 app.workspace_identity.enabled = startup.statusline_workspace;
+            }
+            if (comptime @hasField(App, "git_diff")) {
+                app.git_diff.enabled = startup.statusline_diff;
             }
             if (comptime @hasDecl(App, "setNotificationPreferences")) {
                 app.setNotificationPreferences(
@@ -564,7 +569,9 @@ const TestApp = struct {
     permission_state: app_permission_runtime.State = .{},
     statusline_context: bool = false,
     statusline_session: bool = false,
+    statusline_tokens_per_second: bool = false,
     workspace_identity: statusline_identity.Runtime = .{},
+    git_diff: git_diff_stat.Runtime = .{},
     requested_resume: ?u8 = null,
     mcp_runtime: ?*mcp_runtime.McpRuntime = null,
     skills: skill_runtime.Runtime = .{},
@@ -585,6 +592,7 @@ const TestApp = struct {
         }
         self.auth.deinit(self.alloc);
         self.workspace_identity.deinit(self.alloc);
+        self.git_diff.deinit(self.alloc);
         self.selected_model.deinit(self.alloc);
         self.permission_engine.deinit(self.alloc);
         self.worker.deinit(std.heap.c_allocator);

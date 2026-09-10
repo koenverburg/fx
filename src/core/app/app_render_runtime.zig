@@ -26,6 +26,7 @@ const skill_runtime = @import("../skills/skill_runtime.zig");
 const types = @import("../shared/types.zig");
 const file_index = @import("../workspace/file_index.zig");
 const statusline_identity = @import("../workspace/statusline_identity.zig");
+const git_diff_stat = @import("../workspace/git_diff_stat.zig");
 const activity_runtime = @import("../output/activity_runtime.zig");
 const transcript_presentation = @import("../output/transcript_presentation.zig");
 const event_loop = @import("../../ui/event_loop.zig");
@@ -863,7 +864,31 @@ pub fn Runtime(comptime App: type) type {
                     items.session_title = app_session_runtime.Runtime(App).cachedSessionTitle(app);
                 }
             }
+            if (comptime @hasField(App, "git_diff")) {
+                if (app.git_diff.enabled) {
+                    items.git_lines_changed = app.git_diff.refresh(app.alloc, app.workspace_root);
+                }
+            }
+            if (comptime @hasField(App, "statusline_tokens_per_second")) {
+                if (app.statusline_tokens_per_second) {
+                    items.tokens_per_second = currentTokensPerSecond(app);
+                }
+            }
             return items;
+        }
+
+        /// Live output tokens/sec for the active turn, excluding time spent
+        /// waiting on the user (approval or a question) per `waiting_since_ms`.
+        fn currentTokensPerSecond(app: *App) ?f64 {
+            const stream = app.stream;
+            if (!stream.active or stream.turn_started_ms <= 0) return null;
+            const now_ms = io_mod.milliTimestamp();
+            const end_ms = if (stream.waiting_since_ms > 0) stream.waiting_since_ms else now_ms;
+            const elapsed_ms = end_ms - stream.turn_started_ms;
+            if (elapsed_ms <= 0) return null;
+            const tokens = stream.token_progress.output_tokens;
+            if (tokens == 0) return null;
+            return @as(f64, @floatFromInt(tokens)) * 1000.0 / @as(f64, @floatFromInt(elapsed_ms));
         }
 
         fn pendingPickerFastMode(query: ?picker_state.ModelPickerQuery, fast_index: usize) bool {
@@ -3434,6 +3459,7 @@ const CoordinatorTestApp = struct {
     selected_model: std.ArrayList(u8) = .empty,
     workspace_root: []const u8 = "",
     workspace_identity: statusline_identity.Runtime = .{},
+    git_diff: git_diff_stat.Runtime = .{},
     pacer: CoordinatorTestPacer = .{},
     auth: auth_runtime.Runtime = .{},
     pending_images: std.ArrayList(types.ImageAttachment) = .empty,
@@ -3466,6 +3492,7 @@ const CoordinatorTestApp = struct {
         self.question_prompt.deinit(self.alloc);
         self.selected_model.deinit(self.alloc);
         self.workspace_identity.deinit(self.alloc);
+        self.git_diff.deinit(self.alloc);
         self.pending_images.deinit(self.alloc);
         self.model_cache.deinit();
     }

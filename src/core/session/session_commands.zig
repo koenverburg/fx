@@ -185,12 +185,16 @@ fn appendShadowedUserSources(
             .context => sources.statusline_context,
             .session => sources.statusline_session,
             .workspace => null,
+            .diff => sources.statusline_diff,
+            .tokens_per_second => sources.statusline_tokens_per_second,
         };
         if (source) |resolved| {
             const field = switch (item.item) {
                 .context => "statusLine.context",
                 .session => "statusLine.session",
                 .workspace => unreachable,
+                .diff => "statusLine.diff",
+                .tokens_per_second => "statusLine.tokens_per_second",
             };
             try appendShadowedUserSource(writer, field, true, resolved, &wrote_header);
         }

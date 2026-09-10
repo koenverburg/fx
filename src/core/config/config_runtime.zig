@@ -59,6 +59,8 @@ pub const Settings = struct {
     statusline_context: ?bool = null,
     statusline_session: ?bool = null,
     statusline_workspace: ?bool = null,
+    statusline_diff: ?bool = null,
+    statusline_tokens_per_second: ?bool = null,
     notification_turn_end: ?bool = null,
     notification_attention_required: ?bool = null,
     notification_max: ?bool = null,
@@ -130,6 +132,8 @@ pub const ConfigSources = struct {
     prompt_history_enabled: ConfigSource = .compiled_default,
     statusline_context: ConfigSource = .compiled_default,
     statusline_session: ConfigSource = .compiled_default,
+    statusline_diff: ConfigSource = .compiled_default,
+    statusline_tokens_per_second: ConfigSource = .compiled_default,
     notification_turn_end: ConfigSource = .compiled_default,
     notification_attention_required: ConfigSource = .compiled_default,
     notification_max: ConfigSource = .compiled_default,
@@ -671,6 +675,8 @@ fn updateConfigSources(sources: *ConfigSources, settings: Settings, source: Conf
     if (settings.prompt_history_enabled != null) sources.prompt_history_enabled = source;
     if (settings.statusline_context != null) sources.statusline_context = source;
     if (settings.statusline_session != null) sources.statusline_session = source;
+    if (settings.statusline_diff != null) sources.statusline_diff = source;
+    if (settings.statusline_tokens_per_second != null) sources.statusline_tokens_per_second = source;
     if (settings.notification_turn_end != null) sources.notification_turn_end = source;
     if (settings.notification_attention_required != null) sources.notification_attention_required = source;
     if (settings.notification_max != null) sources.notification_max = source;
@@ -1511,6 +1517,14 @@ fn parseProfileOnlyFields(
                     settings.statusline_workspace = v.bool;
                 }
             }
+            if (value.object.get("diff")) |v| {
+                if (v != .bool) return error.InvalidStatusLineDiffType;
+                settings.statusline_diff = v.bool;
+            }
+            if (value.object.get("tokens_per_second")) |v| {
+                if (v != .bool) return error.InvalidStatusLineTokensPerSecondType;
+                settings.statusline_tokens_per_second = v.bool;
+            }
         }
     }
 
@@ -1584,6 +1598,8 @@ fn mergeSettings(target: *Settings, incoming: *Settings, alloc: Allocator) void 
     if (incoming.statusline_context) |value| target.statusline_context = value;
     if (incoming.statusline_session) |value| target.statusline_session = value;
     if (incoming.statusline_workspace) |value| target.statusline_workspace = value;
+    if (incoming.statusline_diff) |value| target.statusline_diff = value;
+    if (incoming.statusline_tokens_per_second) |value| target.statusline_tokens_per_second = value;
     if (incoming.notification_turn_end) |value| target.notification_turn_end = value;
     if (incoming.notification_attention_required) |value| target.notification_attention_required = value;
     if (incoming.notification_max) |value| target.notification_max = value;
