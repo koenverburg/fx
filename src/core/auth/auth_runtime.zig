@@ -2580,7 +2580,9 @@ pub const Runtime = struct {
                 .source, .action, .team => unreachable,
             },
             .root => switch (selected) {
-                .provider => unreachable,
+                // Only reachable from the onboarding root list (include_skip),
+                // whose choices include the OpenAI-compatible provider directly.
+                .provider => self.closePicker(alloc),
                 .source => self.closePicker(alloc),
                 .action => |action| switch (action) {
                     .connections => {
@@ -4355,6 +4357,19 @@ test "adopting fx login publishes Vercel session availability to setup" {
     const picker = runtime.pickerView();
     try std.testing.expect(picker.fx_login_session_available);
     try std.testing.expect(picker.choiceEnabled(.{ .action = .change_team }));
+}
+
+test "onboarding root picker confirms the OpenAI-compatible provider choice without panicking" {
+    const alloc = std.testing.allocator;
+    var runtime: Runtime = .{};
+    runtime.openOnboardingPicker(alloc);
+    try std.testing.expectEqual(PickerStage.root, runtime.pickerView().stage);
+
+    for (0..4) |_| _ = runtime.movePicker(1);
+    try std.testing.expect((Choice{ .provider = .openai_compat }).eql(runtime.pickerView().selected_choice orelse return error.TestExpectedSelection));
+
+    try std.testing.expect((Choice{ .provider = .openai_compat }).eql(runtime.takePickerChoice(alloc).?));
+    try std.testing.expect(!runtime.pickerView().active);
 }
 
 test "connections picker closes before returning its typed choice" {
